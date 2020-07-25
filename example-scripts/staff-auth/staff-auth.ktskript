@@ -1,0 +1,480 @@
+// Default user database path
+val USER_DATABASE_PATH: String = script.path.parent.resolve("store/users.json").toString()
+val INVITE_DATABASE_PATH: String = script.path.parent.resolve("store/invites.json").toString()
+// User credentials data class
+data class Credentials(
+    var password: String,
+    var role: MutableList<String>
+)
+// Session data class
+data class Session(
+    var isLoggedIn: Boolean = false
+)
+// Invite data class
+data class Invite(
+    var id: String,
+    var role: MutableList<String>
+)
+class Format(
+    val pluginID: String = "&6[&2StaffAuth&6]&r",
+    val logColour: String = "&r",
+    val infoColour: String = "&b",
+    val warningColour: String = "&e",
+    val errorColour: String = "&c"
+) {
+    fun warning(message: String): Text {
+        return "${this.pluginID}: ${this.warningColour}$message".t
+    }
+    fun error(message: String): Text {
+        return "${this.pluginID}: ${this.errorColour}$message".t
+    }
+    fun info(message: String): Text {
+        return "${this.pluginID}: ${this.infoColour}$message".t
+    }
+    fun log(message: String): Text {
+        return "${this.pluginID}: ${this.logColour}$message".t
+    }
+}
+val format = Format()
+// General functions
+
+// Import a user database from a JSON file
+fun importUsers(
+    path: String
+): HashMap<String, Credentials> {
+    // Read user database file
+    val userDatabaseFile = File(path).readText(Charsets.UTF_8)
+    // Create Gson builder
+    val gson = GsonBuilder().create()
+    // Build user database type using TypeToken
+    val DatabaseType = object:TypeToken<HashMap<String, Credentials>>(){}.type
+    // Return HashMap from JSON string
+    return Gson().fromJson<HashMap<String, Credentials>>(userDatabaseFile, DatabaseType)
+}
+// Write a user database to a JSON file
+fun exportUsers(
+    userDatabase: HashMap<String, Credentials>, 
+    path: String
+) {
+    return File(path).writeText(Gson().toJson(userDatabase))
+}
+// Import invites from JSON file
+fun importInvites(
+    path: String
+): HashMap<String, Invite> {
+    // Read invites database file
+    val invitesDatabaseFile = File(path).readText(Charsets.UTF_8)
+    // return invites hashmap
+    return Gson().fromJson<HashMap<String, Invite>>(invitesDatabaseFile, HashMap::class.java)
+}
+// Export invites from JSON file
+fun exportInvites(
+    invitesDatabase: HashMap<String, Invite>,
+    path: String
+) {
+    return File(path).writeText(Gson().toJson(invitesDatabase))
+}
+// Hashing function
+fun hash(
+    password: String, 
+    method: String = "SHA-256"
+): String {
+    return Base64.getUrlEncoder().encodeToString(
+        MessageDigest.getInstance(method).digest(
+            password.toByteArray(Charsets.UTF_8)
+        )
+    )
+}
+// Execute commands as Server
+fun serverExec(command: String) {
+    Server.console.executeCommand("""$command""")
+}
+// Invite message function
+fun inviteMessage(
+    inviteKey: String
+): String {
+    return """["",{"text":"You have been invited to be a member of staff. ","italic":true,"color":"aqua"},{"text":"Click here.","bold":true,"color":"green","clickEvent":{"action":"run_command","value":"/staff register $inviteKey"},"hoverEvent":{"action":"show_text","contents":["Click here to register."]}}]"""
+}
+// New password message
+fun newpasswordMessage(
+    newpassword: String
+): String {
+    return """["",{"text":"Your new password is ","italic":true,"color":"aqua"},{"text":"$newpassword","bold":true,"color":"green"}]"""
+}
+// Generate temporary password
+fun generateTempPassword(
+    length: Int = 8,
+    custom: String = "",
+    upperCase: Boolean = true,
+    lowerCase: Boolean = true,
+    numbers: Boolean = true,
+    specials: Boolean = false
+): String {
+    // Load characters by arguments
+    val upperCaseChars: String = if (upperCase) "ABCDEFGHIJKLMNOPQRSTUVWXYZ" else ""
+    val lowerCaseChars: String = if (lowerCase) "abcdefghijklmnopqrstuvwxyz" else "" 
+    val numbersChars: String = if (numbers) "0123456789" else ""
+    val specialChars: String = if (specials) ".$%&@!}_+=()*^£#[]-|/?{}" else ""
+    // Build character pool
+    val characters: String = upperCaseChars + lowerCaseChars + specialChars + specialChars
+    var ret: String = ""
+    // Build temp password
+    for (index in 0..length) {
+        ret += characters[Math.floor(Math.random() * characters.length).toInt()]
+    }
+    return ret
+}
+// DATABASES
+// Session store
+var SESSIONS: HashMap<String, Session> = HashMap<String, Session>()
+// User database store
+var USERS: HashMap<String, Credentials> = importUsers(USER_DATABASE_PATH)
+// Generate session for each member
+USERS.forEach {
+    (key, value) -> SESSIONS.set(key, Session(false))
+}
+var INVITES: HashMap<String, Invite> = importInvites(INVITE_DATABASE_PATH)
+
+// FUNCTIONS
+fun isRegistered(
+    username: String
+): Boolean {
+    return USERS.containsKey(username)
+}
+// Register player function
+fun register(
+    username: String,
+    password: String,
+    role: MutableList<String>
+): Boolean {
+    USERS.set(username, Credentials(password, role))
+    return true
+}
+// Login player function
+fun login(
+    username: String,  
+    password: String
+): Boolean {
+    if (USERS[username]?.password == password) {
+        if (SESSIONS.containsKey(username)) {
+            SESSIONS[username]?.isLoggedIn = true
+        } else {
+            SESSIONS.put(username, Session(true))
+        }
+        return true
+    } else {
+        return false
+    }
+}
+
+fun changePassword(
+    username: String, 
+    oldPassword: String, 
+    newPassword:String
+): Boolean {
+    if (USERS[username]?.password == oldPassword) {
+        USERS[username]?.password = newPassword
+        return true
+    } else {
+        return false
+    }
+}
+
+fun logout(
+    username: String
+): Boolean {
+    SESSIONS[username]?.isLoggedIn = false
+    return true
+}
+
+fun addRole(
+    username: String, 
+    role: String
+): Boolean {
+    USERS[username]?.role?.add(role)
+    return true
+}
+
+fun removeRole(
+    username: String, 
+    role: String
+): Boolean {
+    USERS[username]?.role?.remove(role)
+    return true
+}
+
+fun hasRole(
+    username: String,
+    role: String
+): Boolean {
+    if (USERS[username]?.role?.contains(role)!!) {
+        return true
+    } else {
+        return false
+    }
+}
+
+fun generateUserListString(
+    list: HashMap<String, Credentials>
+): String {
+    var ret: String = "\n"
+    for ((username, credentials) in list) {
+        ret += "| $username -> Role: ${credentials.role}\n"
+    }
+    return ret
+}
+
+fun generateHelpString(): String {
+    return """
+|=================================================
+| &2StaffAuth &e- A staff authentication plugin.&b         
+|=================================================
+| &ehelp &bor &e? &b- This message.                          
+| &eexport <users|invites> &b- Export database.          
+| &eimport <users|invites> &b- Import database.          
+| &einvite &b- Invite player to register as staff.       
+| &eregister &b- Register player as staff member.  
+| &eforcechangepassword &b- Admin force change password.      
+| &echangepassword &b- Change player password.           
+| &elogin &b- Login user and store session.              
+| &elogout &b- Logout from session.                      
+| &elist &b- List current members of staff.              
+| &eregistercommand &b- Register command (Not Complete). 
+| &emute &b- Example mute command (only if logged-in).   
+|=================================================
+"""
+}
+
+// EVENTS
+onScriptsUnload {
+    // reset sessions on unload
+    SESSIONS.forEach {
+        (key, value) -> value.isLoggedIn = false
+    }
+    // export databases
+    exportUsers(USERS, USER_DATABASE_PATH)
+    exportInvites(INVITES, INVITE_DATABASE_PATH)
+}
+onPlayerLeave {
+    // Logout player on leave
+    if (USERS.containsKey(player.name)) {
+        logout(player.name)
+    }
+}
+
+// Command spec
+registerCommand("staff") {
+    permission("staff.auth")
+    action {
+        commandSource.sendMessage(format.info("A staff authentication plugin."))
+    }
+    // Staff help command spec
+    child("help") {
+        permission("staff.auth.admin.command.help")
+        action {
+            commandSource.sendMessage(format.info(generateHelpString()))
+        }
+    }
+    child("?") {
+        permission("staff.auth.admin.command.help")
+        action {
+            commandSource.sendMessage(format.info(generateHelpString()))
+        }
+    }
+    // Database export command spec
+    child("export") {
+        permission("staff.auth.admin.command.export")
+        arguments(choice("database", "users", "invites"))
+        action {
+            val database: String = argument<String>("database")
+            when(database) {
+                "users" -> {
+                    exportUsers(USERS, USER_DATABASE_PATH)
+                    commandSource.sendMessage(format.info("User database has been exported."))
+                }
+                "invites" -> {
+                    exportInvites(INVITES, INVITE_DATABASE_PATH)
+                    commandSource.sendMessage(format.info("Invite database has been exported."))
+                }
+            }
+        }
+    }
+    // Database import command spec
+    child("import") {
+        permission("staff.auth.admin.command.import")
+        arguments(choice("database", "users", "invites"))
+        action {
+            val database: String = argument<String>("database")
+            when(database) {
+                "users" -> {
+                    USERS = importUsers(USER_DATABASE_PATH)
+                    commandSource.sendMessage(format.info("User database has been imported."))
+                }
+                "invites" -> {
+                    INVITES = importInvites(INVITE_DATABASE_PATH)
+                    commandSource.sendMessage(format.info("Invite database has been imported."))
+                }
+            }
+        }
+    }
+    // Staff invite command spec
+    child("invite") {
+        permission("staff.auth.admin.command.invite")
+        arguments(player("player"), string("role"))
+        action {
+            val username: String = argument<Player>("player").name
+            val role: MutableList<String> = mutableListOf(argument<String>("role"))
+            val inviteKey: String = generateTempPassword(
+                length = 6, 
+                numbers = false
+            )
+            
+            if (!INVITES.containsKey(username)) {
+                INVITES.set(username, Invite(
+                    inviteKey,
+                    role
+                ))
+                serverExec("""tellraw $username ${inviteMessage(inviteKey)}""")
+                commandSource.sendMessage(format.info("$username has been invited. Invite key is $inviteKey"))
+            } else {
+                INVITES.remove(username)
+                commandSource.sendMessage(format.warning("$username invite key already exists. Existing key has been removed."))
+                commandSource.sendMessage(format.warning("Try again to generate a new one."))
+            }
+        }
+    }
+    // Staff register command spec
+    child("register") {
+        permission("staff.auth.user.command.register")
+        arguments(string("invite"))
+        action {
+            val invite: String = argument<String>("invite")
+            val username: String = player.name
+            val tempPassword: String = generateTempPassword()
+            val role: MutableList<String> = INVITES[username]?.role!!
+            if (INVITES.containsKey(username)) {
+                if (INVITES[username]?.id == invite) {
+                    if (!isRegistered(username)) {
+                        register(
+                            username,
+                            hash(tempPassword),
+                            role
+                        )
+                        commandSource.sendMessage(format.info("You have been registered."))
+                        commandSource.sendMessage(format.info("Your temporary password is &a&l$tempPassword"))
+                        commandSource.sendMessage(format.info("To change your password use the command /staff changepassword"))
+                    } else {
+                        commandSource.sendMessage(format.warning("You are already registered."))
+                    }                
+                } else {
+                    commandSource.sendMessage(format.error("Invite is invalid. Please contact an administrator."))
+                }
+            } else {
+                commandSource.sendMessage(format.warning("You have not been invited."))
+            }
+        }
+    }
+    child("forcechangepassword") {
+        permission("staff.auth.admin.forcechangepassword")
+        arguments(string("player"), string("confirm"))
+        action {
+            val username: String = argument<String>("player")
+            val oldHashedPassword: String = USERS[username]?.password!!
+            val newPassword: String = generateTempPassword()
+            val confirm: String = argument<String>("confirm")
+            if (changePassword(username, oldHashedPassword, hash(newPassword))) {
+                commandSource.sendMessage(format.info("Password for $username has been changed."))
+                serverExec("tellraw $username ${newpasswordMessage(newPassword)}")
+            } else {
+                commandSource.sendMessage(format.error("Password for $username incorrect."))
+            }
+        }
+    }
+    // Staff change password command spec
+    child("changePassword") {
+        permission("staff.auth.user.command.changepassword")
+        arguments(string("oldPassword"), string("newPassword"))
+        action(onlyPlayers = true) {
+            val username: String = player.name
+            val oldPassword: String = hash(argument<String>("oldPassword"))
+            val newPassword: String = hash(argument<String>("newPassword"))
+            if (changePassword(username, oldPassword, newPassword)) {
+                commandSource.sendMessage(format.info("Password has been changed."))
+            } else {
+                commandSource.sendMessage(format.error("Password incorrect."))
+            }
+        }
+    }
+    // Staff login command spec
+    child("login") {
+        permission("staff.auth.user.command.login")
+        arguments(string("password"))
+        action(onlyPlayers = true) {
+            val username: String = player.name
+            val password: String = hash(argument<String>("password"))
+            // val ip: String = player.getConnection().getAddress()
+            if (isRegistered(username)) {
+                if (SESSIONS[username]?.isLoggedIn!!) {
+                    commandSource.sendMessage(format.warning("You are already logged-in."))
+                } else {
+                    if (login(username, password)) {
+                        commandSource.sendMessage(format.info("Welcome, &a$username!"))
+                    } else {
+                        commandSource.sendMessage(format.error("Password incorrect."))
+                    }
+                }
+            } else {
+                commandSource.sendMessage(format.warning("You are not registered."))
+            }
+        }
+    }
+    // Staff logout command spec
+    child("logout") {
+        permission("staff.auth.user.command.logout")
+        action(onlyPlayers = true) {
+            val username: String = player.name
+            if (isRegistered(username)) {
+                if (SESSIONS[username]?.isLoggedIn!!) {
+                    logout(username)
+                    commandSource.sendMessage(format.info("Bye, &a${username}."))
+                } else {
+                    commandSource.sendMessage(format.warning("You are not logged-in."))
+                }
+            } else {
+                commandSource.sendMessage(format.warning("You are not registered."))
+            }
+        }
+    }
+    // Staff list command spec
+    child("list") {
+        permission("staff.auth.admin.command.list")
+        action {
+            commandSource.sendMessage(format.info(generateUserListString(USERS)))
+        }
+    }
+    // TODO: Register commands dynamically
+    child("registercommand") {
+        permission("staff.auth.admin.command.registercommand")
+        arguments(string("command"))
+        action {
+            commandSource.sendMessage(format.info("Command is work in progress"))
+        }
+    }
+    // Example mute command registration, executes as: mute <player> <duration> <reason>
+    child("mute") {
+        permission("staff.auth.user.command.mute")
+        arguments(player("player"), integer("duration"), string("reason"))
+        action {
+            val username: String = player.name
+            val target: String = argument<Player>("player").name
+            val duration: Int = argument<Int>("duration")
+            val reason: String = argument<String>("reason")
+            if (SESSIONS[username]?.isLoggedIn!!) {
+                if (hasRole(username, "admin") || hasRole(username, "moderator"))
+                serverExec("mute $target $duration $reason")
+            } else {
+                commandSource.sendMessage(format.error("You are not logged-in."))
+            }
+        }
+    }
+}

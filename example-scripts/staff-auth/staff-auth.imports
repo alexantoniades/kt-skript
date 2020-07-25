@@ -1,0 +1,12 @@
+java.io.File
+java.security.MessageDigest
+java.util.Base64
+java.util.UUID
+
+com.google.gson.Gson
+com.google.gson.GsonBuilder
+com.google.gson.reflect.TypeToken
+
+org.spongepowered.api.command.CommandSource
+org.spongepowered.api.entity.living.player.Player
+org.spongepowered.api.network.RemoteConnection
